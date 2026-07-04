@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>J.A.R.V.I.S.</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #000205;
+  color: #dde3ed;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif;
+  height: 100vh; height: 100dvh;
+  overflow: hidden;
+  display: flex; flex-direction: column;
+  user-select: none; -webkit-user-select: none;
+}
+
+/* ─── 3D Canvas (full screen) ─── */
+#brain-container {
+  position: fixed; top: 0; left: 0;
+  width: 100vw; height: 100vh;
+  z-index: 0;
+}
+
+/* ─── Status ─── */
+.status {
+  position: fixed;
+  bottom: max(40px, env(safe-area-inset-bottom, 40px));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  text-align: center;
+  pointer-events: none;
+  transition: all 0.5s ease;
+}
+
+.status-text {
+  font-size: 11px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: rgba(255,107,53,0.5);
+  transition: all 0.3s ease;
+}
+
+.status-text.active {
+  color: rgba(99,102,241,0.8);
+  letter-spacing: 5px;
+}
+
+.status-text.listening {
+  color: rgba(34,197,94,0.8);
+  animation: breathe 2s ease-in-out infinite;
+}
+
+.status-text.speaking {
+  color: rgba(99,102,241,0.8);
+}
+
+@keyframes breathe {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+/* ─── Top-right dots ─── */
+.dot-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 10;
+  display: flex;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+}
+
+.dot-ai {
+  background: rgba(34,197,94,0.3);
+}
+
+.dot-ai.online {
+  background: rgba(34,197,94,1);
+  box-shadow: 0 0 6px rgba(34,197,94,0.5);
+}
+
+.dot-mic {
+  background: rgba(255,107,53,0.3);
+}
+
+.dot-mic.listening {
+  background: rgba(34,197,94,1);
+  box-shadow: 0 0 6px rgba(34,197,94,0.5);
+  animation: pulse-dot 1.5s infinite;
+}
+
+.dot-mic.speaking {
+  background: rgba(99,102,241,1);
+  box-shadow: 0 0 6px rgba(99,102,241,0.5);
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* ─── Tap zone ─── */
+#tapZone {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100vw; height: 100vh;
+  z-index: 5;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ─── Response overlay ─── */
+.response-overlay {
+  position: fixed;
+  bottom: max(90px, env(safe-area-inset-bottom, 90px));
+  left: 10%;
+  right: 10%;
+  z-index: 8;
+  text-align: center;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.response-text {
+  font-size: 15px;
+  line-height: 1.6;
+  color: rgba(221,227,237,0.85);
+  text-shadow: 0 0 30px rgba(0,0,0,0.9), 0 2px 8px rgba(0,0,0,0.5);
+  transition: all 0.3s ease;
+  max-height: 35vh;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.response-text::-webkit-scrollbar { display: none; }
+
+.transcript-text {
+  font-size: 12px;
+  color: rgba(255,107,53,0.5);
+  margin-top: 10px;
+  min-height: 18px;
+}
+
+/* ─── Waveform rings ─── */
+.wave-ring {
+  position: fixed;
+  top: 50%; left: 50%;
+  width: 0; height: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.5s;
+}
+.wave-ring.active { opacity: 1; }
+
+.wave-ring-inner {
+  position: absolute;
+  top: 50%; left: 50%;
+  border-radius: 50%;
+  border: 1px solid rgba(255,107,53,0.15);
+  animation: wave-expand 2.5s ease-out infinite;
+  transform: translate(-50%, -50%);
+}
+.wave-ring-inner:nth-child(1) { width: 200px; height: 200px; animation-delay: 0s; }
+.wave-ring-inner:nth-child(2) { width: 200px; height: 200px; animation-delay: 0.8s; }
+.wave-ring-inner:nth-child(3) { width: 200px; height: 200px; animation-delay: 1.6s; }
+
+@keyframes wave-expand {
+  0% { transform: translate(-50%,-50%) scale(1); opacity: 0.6; }
+  100% { transform: translate(-50%,-50%) scale(2.5); opacity: 0; }
+}
+
+.wave-ring.speaking .wave-ring-inner {
+  border-color: rgba(99,102,241,0.15);
+}
+
+/* ─── Text Input (keyboard fallback) ─── */
+#textInputBar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px max(8px, env(safe-area-inset-bottom, 8px)) 16px;
+  background: linear-gradient(to top, rgba(0,2,5,0.95) 0%, rgba(0,2,5,0.7) 100%);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+#textInputBar.visible {
+  display: flex;
+}
+
+#textInput {
+  flex: 1;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,107,53,0.2);
+  border-radius: 20px;
+  padding: 10px 16px;
+  color: #dde3ed;
+  font-size: 15px;
+  outline: none;
+  transition: border-color 0.3s;
+}
+
+#textInput:focus {
+  border-color: rgba(99,102,241,0.5);
+}
+
+#textInput::placeholder {
+  color: rgba(255,255,255,0.2);
+}
+
+#sendBtn, #keyboardToggle {
+  background: rgba(255,107,53,0.15);
+  border: 1px solid rgba(255,107,53,0.3);
+  border-radius: 50%;
+  width: 38px; height: 38px;
+  display: flex; align-items: center; justify-content: center;
+  color: rgba(255,107,53,0.7);
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.3s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#sendBtn:active, #keyboardToggle:active {
+  background: rgba(99,102,241,0.3);
+  border-color: rgba(99,102,241,0.5);
+}
+
+/* ─── Hint ─── */
+.hint {
+  position: fixed;
+  bottom: max(20px, env(safe-area-inset-bottom, 20px));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  font-size: 9px;
+  color: rgba(255,255,255,0.08);
+  letter-spacing: 2px;
+  pointer-events: none;
+}
+
+::-webkit-scrollbar { display: none; }
+
+@media (max-width: 480px) {
+  .response-overlay { bottom: max(80px, env(safe-area-inset-bottom, 80px)); }
+  .status { bottom: max(30px, env(safe-area-inset-bottom, 30px)); }
+}
+</style>
+</head>
+<body>
+
+<div id="brain-container"></div>
+
+<div class="wave-ring" id="waveRing">
+  <div class="wave-ring-inner"></div>
+  <div class="wave-ring-inner"></div>
+  <div class="wave-ring-inner"></div>
+</div>
+
+<div class="dot-container">
+  <div class="dot dot-ai" id="dotAi"></div>
+  <div class="dot dot-mic" id="dotMic"></div>
+</div>
+
+<div class="response-overlay">
+  <div class="response-text" id="responseText"></div>
+  <div class="transcript-text" id="transcriptText">🎤 Tippen Sie auf den Bildschirm zum Sprechen</div>
+</div>
+
+<div class="status">
+  <div class="status-text" id="statusText">Tippen zum Sprechen</div>
+</div>
+
+<div id="tapZone"></div>
+
+<!-- Text Input Fallback -->
+<div id="textInputBar">
+  <input type="text" id="textInput" placeholder="Nachricht eingeben..." autocomplete="off" autocorrect="on" />
+  <button id="sendBtn">↵</button>
+</div>
+
+<div class="hint">J.A.R.V.I.S. Mark XLVII</div>
+
+<script>
+// ═══════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════
+const GEMINI_API_KEY = 'AQ.Ab8RN6IX8CO25B9oLeGkCvApdRYXM4RkZGp-_VXZ9DdtA9R6OA';
+const GEMINI_MODEL = 'gemini-2.5-flash';
+const ELEVENLABS_API_KEY = '1cabc24cac83a80625104dc56e06e033c352ae4bd0ed77b0c155e9706369aac0';
+const ELEVENLABS_VOICE_ID = 'nPczCjzI2devNBz1zQrb';
+const SYSTEM_PROMPT = `You are J.A.R.V.I.S. from Iron Man. Respond in German. Address the user as "Sir". Be brilliant, loyal, witty, professional. When user asks to open an app or search, include [OPEN_APP: name] or [SEARCH: query] in your response. Keep responses concise. When you receive audio input, transcribe it yourself and respond to the user's request.`;
+
+// ═══════════════════════════════════════════
+// 3D BRAIN - Particle System
+// ═══════════════════════════════════════════
+const container = document.getElementById('brain-container');
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+container.appendChild(renderer.domElement);
+
+const particleCount = 3000;
+const positions = new Float32Array(particleCount * 3);
+const colors = new Float32Array(particleCount * 3);
+const basePositions = new Float32Array(particleCount * 3);
+
+for (let i = 0; i < particleCount; i++) {
+  const theta = Math.random() * Math.PI * 2;
+  const phi = Math.acos(2 * Math.random() - 1);
+  const r = 2 + Math.random() * 0.5;
+  let x = r * Math.sin(phi) * Math.cos(theta);
+  let y = r * Math.cos(phi) * 1.2;
+  let z = r * Math.sin(phi) * Math.sin(theta) * 0.85;
+  x += (Math.random() - 0.5) * 0.4;
+  y += (Math.random() - 0.5) * 0.4;
+  z += (Math.random() - 0.5) * 0.4;
+
+  basePositions[i*3] = x;
+  basePositions[i*3+1] = y;
+  basePositions[i*3+2] = z;
+  positions[i*3] = x;
+  positions[i*3+1] = y;
+  positions[i*3+2] = z;
+
+  const t = (y + 2.5) / 5;
+  colors[i*3] = 0.8 + t * 0.2;
+  colors[i*3+1] = 0.3 - t * 0.2;
+  colors[i*3+2] = 0.1 - t * 0.08;
+}
+
+const brainGeo = new THREE.BufferGeometry();
+brainGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+brainGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+const brainMat = new THREE.PointsMaterial({
+  size: 0.06,
+  vertexColors: true,
+  transparent: true,
+  opacity: 0.9,
+  blending: THREE.AdditiveBlending,
+  sizeAttenuation: true,
+  depthWrite: false
+});
+const brain = new THREE.Points(brainGeo, brainMat);
+scene.add(brain);
+
+// Neural connections
+const connectionPairs = [];
+for (let i = 0; i < particleCount; i++) {
+  const conns = Math.floor(Math.random() * 3) + 1;
+  for (let c = 0; c < conns; c++) {
+    const j = Math.floor(Math.random() * particleCount);
+    if (i !== j) {
+      const dx = basePositions[i*3] - basePositions[j*3];
+      const dy = basePositions[i*3+1] - basePositions[j*3+1];
+      const dz = basePositions[i*3+2] - basePositions[j*3+2];
+      const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+      if (dist < 1.0 && Math.random() < 0.15) connectionPairs.push(i, j);
+    }
+  }
+}
+
+const connGeo = new THREE.BufferGeometry();
+const connPos = new Float32Array(connectionPairs.length * 3 * 2);
+for (let i = 0; i < connectionPairs.length; i += 2) {
+  const a = connectionPairs[i], b = connectionPairs[i+1];
+  connPos[i*6] = basePositions[a*3];
+  connPos[i*6+1] = basePositions[a*3+1];
+  connPos[i*6+2] = basePositions[a*3+2];
+  connPos[i*6+3] = basePositions[b*3];
+  connPos[i*6+4] = basePositions[b*3+1];
+  connPos[i*6+5] = basePositions[b*3+2];
+}
+connGeo.setAttribute('position', new THREE.BufferAttribute(connPos, 3));
+
+const connMat = new THREE.LineBasicMaterial({
+  color: 0xff6b35, transparent: true, opacity: 0.04
+});
+const connections = new THREE.LineSegments(connGeo, connMat);
+scene.add(connections);
+
+// Glow core
+const glowGeo = new THREE.SphereGeometry(1.2, 32, 32);
+const glowMat = new THREE.MeshBasicMaterial({ color: 0xff3c00, transparent: true, opacity: 0.06 });
+const glow = new THREE.Mesh(glowGeo, glowMat);
+scene.add(glow);
+
+// Ambient particles
+const ambientCount = 800;
+const ambPos = new Float32Array(ambientCount * 3);
+for (let i = 0; i < ambientCount * 3; i++) ambPos[i] = (Math.random() - 0.5) * 30;
+const ambGeo = new THREE.BufferGeometry();
+ambGeo.setAttribute('position', new THREE.BufferAttribute(ambPos, 3));
+const ambMat = new THREE.PointsMaterial({
+  color: 0x6366f1, size: 0.02, transparent: true, opacity: 0.15, blending: THREE.AdditiveBlending
+});
+scene.add(new THREE.Points(ambGeo, ambMat));
+
+const light1 = new THREE.PointLight(0xff6b35, 3, 10);
+light1.position.set(3, 1, 3); scene.add(light1);
+const light2 = new THREE.PointLight(0x6366f1, 1, 10);
+light2.position.set(-3, -1, 3); scene.add(light2);
+camera.position.z = 4.5;
+
+let brainState = 'idle';
+let brainPulse = 0;
+let brainRotation = 0;
+
+function animate() {
+  requestAnimationFrame(animate);
+  const t = Date.now() * 0.001;
+  const rotSpeed = brainState === 'idle' ? 0.15 : 0.4;
+  brainRotation += 0.002 * (rotSpeed / 0.15);
+  brain.rotation.y = brainRotation;
+  brain.rotation.x = Math.sin(t * 0.05) * 0.05;
+  connections.rotation.y = brainRotation;
+  connections.rotation.x = Math.sin(t * 0.05) * 0.05;
+
+  if (brainState === 'listening') brainPulse += (1 - brainPulse) * 0.05;
+  else if (brainState === 'speaking') brainPulse = 0.5 + Math.sin(t * 4) * 0.3;
+  else if (brainState === 'thinking') brainPulse = 0.3 + Math.sin(t * 2) * 0.1;
+  else brainPulse += (0 - brainPulse) * 0.02;
+
+  const pos = brain.geometry.attributes.position.array;
+  for (let i = 0; i < particleCount; i++) {
+    const idx = i * 3;
+    const wave = Math.sin(t * 0.5 + basePositions[idx] * 2 + basePositions[idx+1] * 3) * brainPulse * 0.08;
+    pos[idx] = basePositions[idx] + wave * (Math.random() - 0.5) * 0.5;
+    pos[idx+1] = basePositions[idx+1] + Math.sin(t + i) * 0.01;
+    pos[idx+2] = basePositions[idx+2] + Math.cos(t * 0.7 + i * 0.1) * 0.01;
+  }
+  brain.geometry.attributes.position.needsUpdate = true;
+
+  connections.material.opacity = brainState === 'idle' ? 0.04 : 0.08 + brainPulse * 0.12;
+
+  const glowI = 0.06 + brainPulse * 0.12;
+  glow.material.opacity = glowI;
+  glow.scale.setScalar(1 + brainPulse * 0.3);
+
+  brain.material.size = 0.06 + brainPulse * 0.03;
+  brain.material.opacity = 0.85 + brainPulse * 0.1;
+
+  renderer.render(scene, camera);
+}
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ═══════════════════════════════════════════
+// UI
+// ═══════════════════════════════════════════
+const statusText = document.getElementById('statusText');
+const responseText = document.getElementById('responseText');
+const transcriptText = document.getElementById('transcriptText');
+const waveRing = document.getElementById('waveRing');
+const dotAi = document.getElementById('dotAi');
+const dotMic = document.getElementById('dotMic');
+const tapZone = document.getElementById('tapZone');
+const textInputBar = document.getElementById('textInputBar');
+const textInput = document.getElementById('textInput');
+const sendBtn = document.getElementById('sendBtn');
+
+function setState(state) {
+  brainState = state;
+  statusText.className = 'status-text';
+  waveRing.className = 'wave-ring';
+
+  switch(state) {
+    case 'listening':
+      statusText.classList.add('listening');
+      statusText.textContent = 'Höre zu';
+      waveRing.classList.add('active');
+      dotMic.className = 'dot dot-mic listening';
+      break;
+    case 'thinking':
+      statusText.classList.add('active');
+      statusText.textContent = 'JARVIS denkt';
+      waveRing.classList.remove('active');
+      dotMic.className = 'dot dot-mic';
+      break;
+    case 'speaking':
+      statusText.classList.add('speaking');
+      statusText.textContent = 'JARVIS spricht';
+      waveRing.classList.add('active', 'speaking');
+      dotMic.className = 'dot dot-mic speaking';
+      break;
+    default:
+      statusText.textContent = 'Tippen zum Sprechen';
+      waveRing.classList.remove('active');
+      dotMic.className = 'dot dot-mic';
+      break;
+  }
+}
+
+function showResponse(text) {
+  responseText.textContent = text;
+  responseText.style.opacity = '1';
+}
+
+function showTranscript(text) {
+  transcriptText.textContent = '🎤 ' + text;
+}
+
+function clearTranscript() {
+  transcriptText.textContent = '';
+}
+
+// ═══════════════════════════════════════════
+// GEMINI API
+// ═══════════════════════════════════════════
+let chatHistory = [];
+
+async function callGemini(text) {
+  const contents = [{ role: 'user', parts: [{ text: SYSTEM_PROMPT }] }];
+  for (const msg of chatHistory.slice(-8)) {
+    contents.push({
+      role: msg.role === 'user' ? 'user' : 'model',
+      parts: [{ text: msg.content }]
+    });
+  }
+  contents.push({ role: 'user', parts: [{ text }] });
+
+  const data = await geminiRequest(contents);
+  if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
+    return data.candidates[0].content.parts[0].text;
+  }
+  if (data.error) throw new Error(data.error.message);
+  throw new Error('Keine Antwort');
+}
+
+async function callGeminiWithAudio(audioBase64, mimeType) {
+  const contents = [{ role: 'user', parts: [{ text: SYSTEM_PROMPT }] }];
+  for (const msg of chatHistory.slice(-8)) {
+    contents.push({
+      role: msg.role === 'user' ? 'user' : 'model',
+      parts: [{ text: msg.content }]
+    });
+  }
+  // Audio input
+  contents.push({
+    role: 'user',
+    parts: [{ inlineData: { mimeType, data: audioBase64 } }]
+  });
+
+  const data = await geminiRequest(contents);
+  if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
+    return data.candidates[0].content.parts[0].text;
+  }
+  if (data.error) throw new Error(data.error.message);
+  throw new Error('Keine Antwort');
+}
+
+async function geminiRequest(contents) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents,
+      generationConfig: { temperature: 0.8, maxOutputTokens: 512 }
+    })
+  });
+  return await resp.json();
+}
+
+// ═══════════════════════════════════════════
+// TTS (Text-to-Speech)
+// ═══════════════════════════════════════════
+// Strategy: Browser SpeechSynthesis → Google Translate TTS → ElevenLabs
+
+let audioContext = null;
+let ttsVoicesLoaded = false;
+let ttsGermanVoice = null;
+let ttsReady = false;
+
+// Wait for voices and find a good German voice
+function initTTS() {
+  return new Promise((resolve) => {
+    if (!window.speechSynthesis) { resolve(false); return; }
+    
+    const checkVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      if (voices.length > 0) {
+        // Prefer a German voice
+        ttsGermanVoice = voices.find(v => v.lang.startsWith('de')) || 
+                         voices.find(v => v.lang.startsWith('de-DE')) || null;
+        ttsVoicesLoaded = true;
+        ttsReady = true;
+        resolve(true);
+        return;
+      }
+      // Voices not loaded yet, wait for event
+      if (!ttsVoicesLoaded) {
+        window.speechSynthesis.onvoiceschanged = () => {
+          const v = window.speechSynthesis.getVoices();
+          ttsGermanVoice = v.find(v => v.lang.startsWith('de')) || v[0] || null;
+          ttsVoicesLoaded = true;
+          ttsReady = true;
+          resolve(true);
+        };
+        // Timeout fallback
+        setTimeout(() => {
+          if (!ttsVoicesLoaded) {
+            ttsVoicesLoaded = true;
+            ttsReady = true;
+            resolve(true);
+          }
+        }, 2000);
+      }
+    };
+    checkVoices();
+  });
+}
+
+// Primary: Browser SpeechSynthesis (instant, no API key)
+function speakBrowserTTS(text) {
+  return new Promise((resolve) => {
+    if (!window.speechSynthesis) { resolve(false); return; }
+    
+    // Cancel any ongoing speech
+    window.speechSynthesis.cancel();
+    
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'de-DE';
+    u.rate = 0.9;
+    u.pitch = 0.8;
+    u.volume = 1.0;
+    
+    // Use German voice if available
+    if (ttsGermanVoice) u.voice = ttsGermanVoice;
+    
+    let started = false;
+    let timeout = setTimeout(() => {
+      if (!started) { resolve(false); }
+    }, 2000);
+    
+    u.onstart = () => { started = true; clearTimeout(timeout); };
+    u.onend = () => { resolve(true); };
+    u.onerror = () => { clearTimeout(timeout); resolve(false); };
+    
+    try {
+      window.speechSynthesis.speak(u);
+      // Chrome bug: speechSynthesis.speak() might not fire events
+      setTimeout(() => { if (!started) window.speechSynthesis.speak(u); }, 100);
+    } catch(e) {
+      clearTimeout(timeout);
+      resolve(false);
+    }
+  });
+}
+
+// Secondary: Google Translate TTS (free, excellent German pronunciation)
+function speakGoogleTTS(text) {
+  return new Promise((resolve) => {
+    // Limit text length for Google TTS (200 chars max per request)
+    const maxLen = 180;
+    if (text.length > maxLen) {
+      text = text.substring(0, maxLen) + '...';
+    }
+    
+    const url = 'https://translate.google.com/translate_tts'
+      + '?ie=UTF-8&q=' + encodeURIComponent(text)
+      + '&tl=de&client=tw-ob&ttsspeed=0.9';
+    
+    fetch(url)
+      .then(r => {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.arrayBuffer();
+      })
+      .then(buf => {
+        if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        return audioContext.decodeAudioData(buf);
+      })
+      .then(buf => {
+        const source = audioContext.createBufferSource();
+        source.buffer = buf;
+        source.connect(audioContext.destination);
+        source.onended = () => { resolve(true); };
+        source.start(0);
+        if (audioContext.state === 'suspended') audioContext.resume();
+      })
+      .catch(() => { resolve(false); });
+  });
+}
+
+// Tertiary: ElevenLabs (premium, only if API key works)
+function speakElevenLabs(text) {
+  return new Promise((resolve) => {
+    if (!ELEVENLABS_API_KEY || ELEVENLABS_API_KEY.length < 10) { resolve(false); return; }
+    
+    fetch('https://api.elevenlabs.io/v1/text-to-speech/' + ELEVENLABS_VOICE_ID, {
+      method: 'POST',
+      headers: {
+        'xi-api-key': ELEVENLABS_API_KEY,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        text: text,
+        model_id: 'eleven_flash_v2_5',
+        voice_settings: { stability: 0.45, similarity_boost: 0.8, speed: 0.9 }
+      })
+    })
+    .then(r => {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.arrayBuffer();
+    })
+    .then(buf => {
+      if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      return audioContext.decodeAudioData(buf);
+    })
+    .then(buf => {
+      const source = audioContext.createBufferSource();
+      source.buffer = buf;
+      source.connect(audioContext.destination);
+      source.onended = () => { resolve(true); };
+      source.start(0);
+      if (audioContext.state === 'suspended') audioContext.resume();
+    })
+    .catch(() => { resolve(false); });
+  });
+}
+
+// Master speak function - tries each method in order
+async function speakText(text) {
+  if (!text) return;
+  setState('speaking');
+  
+  // 1. Browser TTS (fastest, most reliable)
+  if (await speakBrowserTTS(text)) {
+    setState('listening');
+    return;
+  }
+  
+  // 2. Google Translate TTS (free, great German)
+  if (await speakGoogleTTS(text)) {
+    setState('listening');
+    return;
+  }
+  
+  // 3. ElevenLabs (premium fallback)
+  if (await speakElevenLabs(text)) {
+    setState('listening');
+    return;
+  }
+  
+  // All methods failed - just show text
+  console.warn('All TTS methods failed');
+  setState('listening');
+}
+
+// ═══════════════════════════════════════════
+// SPEECH RECOGNITION
+// ═══════════════════════════════════════════
+let isProcessing = false;
+let isListening = false;
+
+async function initSpeech() {
+  // Try native JarvisSpeech (MediaRecorder-based)
+  if (window.JarvisSpeech && typeof window.JarvisSpeech.startListening === 'function') {
+    console.log('✅ Native Android Speech (MediaRecorder)');
+
+    window.onSpeechResult = function(text) {
+      // Text-based result (from potential SpeechRecognizer fallback)
+      if (text && text.trim().length > 0) {
+        processInput(text.trim());
+      }
+    };
+
+    window.onSpeechAudio = function(audioBase64, mimeType) {
+      // Audio data from MediaRecorder → send to Gemini for STT + response
+      if (audioBase64 && audioBase64.length > 10) {
+        processAudioInput(audioBase64, mimeType);
+      }
+    };
+
+    window.onSpeechPartial = function(text) {
+      if (text) showTranscript(text);
+    };
+
+    window.onSpeechError = function(err) {
+      console.warn('Speech error:', err);
+      if (err === 'KEINE_SPRACHE' || err === 'KEINE_ERKENNUNG') {
+        if (isListening) {
+          setTimeout(() => startListening(), 300);
+        }
+        return;
+      }
+      setState('idle');
+      if (isListening) {
+        isListening = false;
+        setTimeout(() => startListening(), 1000);
+      }
+    };
+
+    window.onSpeechBegin = function() {
+      showTranscript('');
+    };
+
+    dotAi.classList.add('online');
+    return true;
+  }
+
+  // Fallback: Web Speech API
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (SR) {
+    console.log('✅ Web Speech API fallback');
+    const recognition = new SR();
+    recognition.lang = 'de-DE';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    let finalTxt = '';
+    let to = null;
+    recognition.onresult = (e) => {
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) finalTxt += e.results[i][0].transcript + ' ';
+        else interim += e.results[i][0].transcript;
+      }
+      if (interim) showTranscript(interim);
+      clearTimeout(to);
+      to = setTimeout(() => {
+        if (finalTxt.trim()) {
+          const t = finalTxt.trim();
+          finalTxt = '';
+          stopListening();
+          processInput(t);
+        }
+      }, 800);
+    };
+    recognition.onerror = (e) => {
+      if (e.error === 'no-speech' && isListening) setTimeout(() => startListening(), 100);
+      else { setState('idle'); isListening = false; }
+    };
+    recognition.onend = () => { if (isListening) setTimeout(() => startListening(), 100); };
+
+    window._webSpeechRecognition = recognition;
+    dotAi.classList.add('online');
+    return true;
+  }
+
+  console.warn('No speech recognition available');
+  dotAi.classList.remove('online');
+  showTranscript('⌨️ Tippen Sie unten für Texteingabe');
+  setTimeout(() => showTextInput(), 500);
+  return false;
+}
+
+function startListening() {
+  if (isProcessing) return;
+  isListening = true;
+  setState('listening');
+
+  if (window.JarvisSpeech) {
+    try { window.JarvisSpeech.startListening(); } catch(e) { console.warn(e); }
+  } else if (window._webSpeechRecognition) {
+    try { window._webSpeechRecognition.start(); } catch(e) {}
+  }
+}
+
+function stopListening() {
+  isListening = false;
+  if (window.JarvisSpeech) {
+    try { window.JarvisSpeech.stopListening(); } catch(e) {}
+  } else if (window._webSpeechRecognition) {
+    try { window._webSpeechRecognition.stop(); } catch(e) {}
+  }
+}
+
+// ═══════════════════════════════════════════
+// TEXT INPUT (Keyboard Fallback)
+// ═══════════════════════════════════════════
+let textInputVisible = false;
+
+function showTextInput() {
+  textInputBar.classList.add('visible');
+  textInputVisible = true;
+}
+
+function hideTextInput() {
+  textInputBar.classList.remove('visible');
+  textInputVisible = false;
+  textInput.blur();
+}
+
+function toggleTextInput() {
+  if (textInputVisible) {
+    hideTextInput();
+  } else {
+    showTextInput();
+    setTimeout(() => textInput.focus(), 100);
+  }
+}
+
+// Long press on brain toggles keyboard
+let pressTimer = null;
+tapZone.addEventListener('touchstart', (e) => {
+  pressTimer = setTimeout(() => {
+    pressTimer = null;
+    toggleTextInput();
+  }, 600);
+});
+tapZone.addEventListener('touchend', () => {
+  if (pressTimer) {
+    clearTimeout(pressTimer);
+    pressTimer = null;
+  }
+});
+
+tapZone.addEventListener('click', () => {
+  if (textInputVisible) {
+    hideTextInput();
+    return;
+  }
+  if (isListening) {
+    stopListening();
+    setState('idle');
+  } else {
+    startListening();
+  }
+});
+
+textInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && textInput.value.trim()) {
+    const txt = textInput.value.trim();
+    textInput.value = '';
+    hideTextInput();
+    processInput(txt);
+  }
+});
+
+sendBtn.addEventListener('click', () => {
+  if (textInput.value.trim()) {
+    const txt = textInput.value.trim();
+    textInput.value = '';
+    hideTextInput();
+    processInput(txt);
+  }
+});
+
+// ═══════════════════════════════════════════
+// PROCESS INPUT
+// ═══════════════════════════════════════════
+async function processInput(text) {
+  if (!text.trim() || isProcessing) return;
+  isProcessing = true;
+  clearTranscript();
+
+  showTranscript('🎤 ' + text);
+  showResponse('');
+  stopListening();
+  setState('thinking');
+
+  chatHistory.push({ role: 'user', content: text });
+
+  try {
+    const reply = await callGemini(text);
+    await handleReply(reply);
+  } catch (e) {
+    showResponse('⚠️ ' + e.message);
+  }
+
+  isProcessing = false;
+  setTimeout(() => {
+    if (!isListening && !isProcessing) startListening();
+  }, 400);
+}
+
+async function processAudioInput(audioBase64, mimeType) {
+  if (isProcessing) return;
+  isProcessing = true;
+
+  showTranscript('🎤 Audio wird verarbeitet...');
+  showResponse('');
+  stopListening();
+  setState('thinking');
+
+  try {
+    const reply = await callGeminiWithAudio(audioBase64, mimeType);
+    await handleReply(reply);
+  } catch (e) {
+    console.error('Audio processing error:', e);
+    showResponse('⚠️ Konnte Audio nicht verarbeiten: ' + e.message);
+    setState('idle');
+  }
+
+  isProcessing = false;
+  setTimeout(() => {
+    if (!isListening && !isProcessing) startListening();
+  }, 400);
+}
+
+async function handleReply(reply) {
+  // Extract commands
+  const cmdRegex = /\[([A-Z_]+):\s*([^\]]+)\]/g;
+  const commands = [];
+  let match;
+  while ((match = cmdRegex.exec(reply)) !== null) {
+    commands.push({ cmd: match[1], param: match[2].trim() });
+  }
+
+  // Clean response text
+  let cleanReply = reply.replace(/\[[^\]]*\]/g, '').trim();
+  if (cleanReply) {
+    chatHistory.push({ role: 'assistant', content: cleanReply });
+    showResponse(cleanReply);
+  }
+
+  // Execute device commands
+  for (const c of commands) {
+    if (window.JarvisDevice) {
+      try {
+        switch(c.cmd) {
+          case 'OPEN_APP': window.JarvisDevice.openApp(c.param); break;
+          case 'SEARCH': window.JarvisDevice.searchWeb(c.param); break;
+          case 'URL': window.JarvisDevice.openUrl(c.param); break;
+          case 'NAVIGATE':
+            if (c.param.toLowerCase().includes('home') || c.param.toLowerCase().includes('start'))
+              window.JarvisDevice.goHome();
+            break;
+        }
+      } catch(e) { console.warn('Device cmd error:', e); }
+    }
+  }
+
+  // Speak
+  if (cleanReply) {
+    await speakText(cleanReply);
+  }
+}
+
+// ═══════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════
+async function init() {
+  const ready = await initSpeech();
+
+  await initTTS();
+  if (!ready) {
+    showResponse('J.A.R.V.I.S. – Mikrofon nicht verfügbar. Bitte Texteingabe nutzen.');
+    showTextInput();
+  }
+
+  // Time greeting
+  const h = new Date().getHours();
+  let g = 'Guten Abend, Sir.';
+  if (h < 5) g = 'Gute Nacht, Sir.';
+  else if (h < 10) g = 'Guten Morgen, Sir.';
+  else if (h < 14) g = 'Guten Tag, Sir.';
+  else if (h < 18) g = 'Guten Nachmittag, Sir.';
+
+  setTimeout(() => {
+    showResponse(g + ' J.A.R.V.I.S. ist bereit.');
+    setTimeout(() => {
+      if (window.JarvisSpeech || window._webSpeechRecognition) {
+        startListening();
+      }
+      // Also show a small keyboard icon hint
+    }, 500);
+  }, 800);
+
+  // Start animation
+  animate();
+}
+
+init();
+</script>
+</body>
+</html>
