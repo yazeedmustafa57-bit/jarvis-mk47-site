@@ -302,9 +302,9 @@ body {
 // ═══════════════════════════════════════════
 // CONFIG
 // ═══════════════════════════════════════════
-const GEMINI_API_KEY = 'AQ.Ab8RN6IX8CO25B9oLeGkCvApdRYXM4RkZGp-_VXZ9DdtA9R6OA';
+const GEMINI_API_KEY = localStorage.getItem("jarvis_gemini_key") || "";
 const GEMINI_MODEL = 'gemini-2.5-flash';
-const ELEVENLABS_API_KEY = '1cabc24cac83a80625104dc56e06e033c352ae4bd0ed77b0c155e9706369aac0';
+const ELEVENLABS_API_KEY = localStorage.getItem("jarvis_elevenlabs_key") || "";
 const ELEVENLABS_VOICE_ID = 'nPczCjzI2devNBz1zQrb';
 const SYSTEM_PROMPT = `You are J.A.R.V.I.S. from Iron Man. Respond in German. Address the user as "Sir". Be brilliant, loyal, witty, professional. When user asks to open an app or search, include [OPEN_APP: name] or [SEARCH: query] in your response. Keep responses concise. When you receive audio input, transcribe it yourself and respond to the user's request.`;
 
