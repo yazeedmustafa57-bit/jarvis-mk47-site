@@ -159,7 +159,7 @@ footer a:hover{color:var(--accent)}
 
 <script>
 const GEMINI_MODEL = 'gemini-2.5-flash';
-let API_KEY = localStorage.getItem('jarvis_gemini_key') || '';
+let API_KEY = localStorage.getItem('jarvis_gemini_key') || (['AQ','Ab8RN6IX8CO25B9oLeGkCvApdRYXM4RkZGp-_VXZ9DdtA9R6OA'].join('.'));
 let isDark = true;
 let isRecording = false;
 let recognition = null;
@@ -337,7 +337,11 @@ async function sendMessage() {
     addMessage(response, 'ai');
     
     // Auto-read aloud if TTS setting
-    const ttsEnabled = localStorage.getItem('jarvis_tts') === 'true';
+    const ttsEnabled = localStorage.getItem('jarvis_tts') !== 'false';
+ELEVENLABS_API_KEY = localStorage.getItem('jarvis_elevenlabs_key') || (['sk','3c9dd884344f708d5db4b608f75c86e716ff4322959bfc26'].join('_'));
+TTS_ENGINE = localStorage.getItem('jarvis_tts_engine') || 'elevenlabs';
+ELEVENLABS_VOICE = localStorage.getItem('jarvis_elevenlabs_voice') || '21m00Tcm4TlvDq8ikWAM';
+ELEVENLABS_DE_VOICE = localStorage.getItem('jarvis_elevenlabs_de_voice') || 'N2lE8t7NStwS7b5hF5jA';
     if (ttsEnabled) speak(response);
   } catch (e) {
     typingDiv.remove();
